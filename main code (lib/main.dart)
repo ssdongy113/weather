@@ -1,0 +1,282 @@
+main code (lib/main.dart)
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:geolocator/geolocator.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:weather_icons/weather_icons.dart';
+
+void main() {
+  runApp(WeatherApp());
+}
+
+class WeatherApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Weather App',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: WeatherScreen(),
+      debugShowCheckedModeBanner: false,
+    );
+  }
+}
+
+class WeatherScreen extends StatefulWidget {
+  @override
+  _WeatherScreenState createState() => _WeatherScreenState();
+}
+
+class _WeatherScreenState extends State<WeatherScreen> {
+  final String apiKey = 'YOUR_OPENWEATHERMAP_API_KEY';
+  final String baseUrl = 'https://api.openweathermap.org/data/2.5/weather';
+  
+  Map<String, dynamic>? weatherData;
+  bool isLoading = true;
+  String error = '';
+  String location = 'Current Location';
+
+  @override
+  void initState() {
+    super.initState();
+    fetchWeather();
+  }
+
+  Future<void> fetchWeather([String? city]) async {
+    setState(() {
+      isLoading = true;
+      error = '';
+    });
+    
+    try {
+      if (city != null) {
+        await getWeatherByCity(city);
+      } else {
+        await getCurrentLocationWeather();
+      }
+    } catch (e) {
+      setState(() {
+        error = e.toString();
+        isLoading = false;
+      });
+    }
+  }
+
+  Future<void> getCurrentLocationWeather() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw Exception('Location services are disabled.');
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        throw Exception('Location permissions are denied');
+      }
+    }
+    
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception('Location permissions are permanently denied.');
+    }
+
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+    
+    await getWeatherByCoords(position.latitude, position.longitude);
+  }
+
+  Future<void> getWeatherByCoords(double lat, double lon) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl?lat=$lat&lon=$lon&appid=$apiKey&units=metric'),
+    );
+
+    if (response.statusCode == 200) {
+      setState(() {
+        weatherData = json.decode(response.body);
+        location = weatherData!['name'];
+        isLoading = false;
+      });
+    } else {
+      throw Exception('Failed to load weather data');
+    }
+  }
+
+  Future<void> getWeatherByCity(String city) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl?q=$city&appid=$apiKey&units=metric'),
+    );
+
+    if (response.statusCode == 200) {
+      setState(() {
+        weatherData = json.decode(response.body);
+        location = weatherData!['name'];
+        isLoading = false;
+      });
+    } else {
+      throw Exception('Failed to load weather data');
+    }
+  }
+
+  IconData getWeatherIcon(String iconCode) {
+    switch (iconCode) {
+      case '01d': return WeatherIcons.day_sunny;
+      case '01n': return WeatherIcons.night_clear;
+      case '02d': return WeatherIcons.day_cloudy;
+      case '02n': return WeatherIcons.night_cloudy;
+      case '03d':
+      case '03n': return WeatherIcons.cloud;
+      case '04d':
+      case '04n': return WeatherIcons.cloudy;
+      case '09d':
+      case '09n': return WeatherIcons.rain;
+      case '10d': return WeatherIcons.day_rain;
+      case '10n': return WeatherIcons.night_rain;
+      case '11d':
+      case '11n': return WeatherIcons.thunderstorm;
+      case '13d':
+      case '13n': return WeatherIcons.snow;
+      case '50d':
+      case '50n': return WeatherIcons.fog;
+      default: return WeatherIcons.day_sunny;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.blue.shade800, Colors.blue.shade500],
+          ),
+        ),
+        child: isLoading
+            ? Center(
+                child: SpinKitDoubleBounce(
+                  color: Colors.white,
+                  size: 100.0,
+                ),
+              )
+            : error.isNotEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Error: $error',
+                          style: TextStyle(color: Colors.red, fontSize: 18),
+                        ),
+                        SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: fetchWeather,
+                          child: Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
+                : Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          location,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 20),
+                        Icon(
+                          getWeatherIcon(weatherData!['weather'][0]['icon']),
+                          size: 100,
+                          color: Colors.white,
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          '${weatherData!['main']['temp'].round()}°C',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 48,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          weatherData!['weather'][0]['description']
+                              .toString()
+                              .toUpperCase(),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                          ),
+                        ),
+                        SizedBox(height: 30),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            Column(
+                              children: [
+                                Icon(
+                                  WeatherIcons.humidity,
+                                  color: Colors.white,
+                                  size: 30,
+                                ),
+                                SizedBox(height: 5),
+                                Text(
+                                  '${weatherData!['main']['humidity']}%',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              children: [
+                                Icon(
+                                  WeatherIcons.strong_wind,
+                                  color: Colors.white,
+                                  size: 30,
+                                ),
+                                SizedBox(height: 5),
+                                Text(
+                                  '${weatherData!['wind']['speed']} m/s',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              children: [
+                                Icon(
+                                  WeatherIcons.cloud,
+                                  color: Colors.white,
+                                  size: 30,
+                                ),
+                                SizedBox(height: 5),
+                                Text(
+                                  '${weatherData!['clouds']['all']}%',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: fetchWeather,
+        child: Icon(Icons.refresh),
+        backgroundColor: Colors.blue.shade700,
+      ),
+    );
+  }
+}
