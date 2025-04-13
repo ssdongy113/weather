@@ -1,0 +1,213 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Image, ActivityIndicator, TouchableOpacity } from 'react-native';
+import axios from 'axios';
+import Geolocation from 'react-native-geolocation-service';
+import LinearGradient from 'react-native-linear-gradient';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+
+const API_KEY = 'YOUR_OPENWEATHERMAP_API_KEY';
+const BASE_URL = 'https://api.openweathermap.org/data/2.5/weather';
+
+const App = () => {
+  const [weatherData, setWeatherData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [location, setLocation] = useState('Current Location');
+
+  useEffect(() => {
+    fetchWeather();
+  }, []);
+
+  const fetchWeather = (city = null) => {
+    setLoading(true);
+    setError(null);
+    
+    if (city) {
+      getWeatherByCity(city);
+    } else {
+      getCurrentLocationWeather();
+    }
+  };
+
+  const getCurrentLocationWeather = () => {
+    Geolocation.getCurrentPosition(
+      position => {
+        const { latitude, longitude } = position.coords;
+        getWeatherByCoords(latitude, longitude);
+      },
+      error => {
+        setError(error.message);
+        setLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    );
+  };
+
+  const getWeatherByCoords = async (lat, lon) => {
+    try {
+      const response = await axios.get(BASE_URL, {
+        params: {
+          lat,
+          lon,
+          appid: API_KEY,
+          units: 'metric',
+        },
+      });
+      setWeatherData(response.data);
+      setLocation(response.data.name);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getWeatherByCity = async city => {
+    try {
+      const response = await axios.get(BASE_URL, {
+        params: {
+          q: city,
+          appid: API_KEY,
+          units: 'metric',
+        },
+      });
+      setWeatherData(response.data);
+      setLocation(response.data.name);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getWeatherIcon = iconCode => {
+    return `https://openweathermap.org/img/wn/${iconCode}@4x.png`;
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0000ff" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>Error: {error}</Text>
+        <TouchableOpacity onPress={fetchWeather}>
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <LinearGradient
+      colors={['#4c669f', '#3b5998', '#192f6a']}
+      style={styles.container}
+    >
+      <Text style={styles.locationText}>{location}</Text>
+      
+      {weatherData && (
+        <>
+          <Image
+            source={{ uri: getWeatherIcon(weatherData.weather[0].icon) }}
+            style={styles.weatherIcon}
+          />
+          <Text style={styles.temperatureText}>
+            {Math.round(weatherData.main.temp)}°C
+          </Text>
+          <Text style={styles.weatherDescription}>
+            {weatherData.weather[0].description}
+          </Text>
+          
+          <View style={styles.detailsContainer}>
+            <View style={styles.detailItem}>
+              <Icon name="water" size={24} color="#fff" />
+              <Text style={styles.detailText}>{weatherData.main.humidity}%</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Icon name="air" size={24} color="#fff" />
+              <Text style={styles.detailText}>{weatherData.wind.speed} m/s</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Icon name="cloud" size={24} color="#fff" />
+              <Text style={styles.detailText}>{weatherData.clouds.all}%</Text>
+            </View>
+          </View>
+        </>
+      )}
+      
+      <TouchableOpacity style={styles.refreshButton} onPress={fetchWeather}>
+        <Icon name="refresh" size={30} color="#fff" />
+      </TouchableOpacity>
+    </LinearGradient>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  locationText: {
+    fontSize: 28,
+    color: '#fff',
+    marginBottom: 20,
+    fontWeight: 'bold',
+  },
+  weatherIcon: {
+    width: 150,
+    height: 150,
+    marginBottom: 10,
+  },
+  temperatureText: {
+    fontSize: 48,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  weatherDescription: {
+    fontSize: 20,
+    color: '#fff',
+    textTransform: 'capitalize',
+    marginBottom: 30,
+  },
+  detailsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginTop: 30,
+  },
+  detailItem: {
+    alignItems: 'center',
+  },
+  detailText: {
+    color: '#fff',
+    marginTop: 5,
+  },
+  refreshButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+  },
+  errorText: {
+    color: 'red',
+    fontSize: 18,
+    marginBottom: 20,
+  },
+  retryText: {
+    color: 'blue',
+    fontSize: 16,
+  },
+});
+
+export default App;
