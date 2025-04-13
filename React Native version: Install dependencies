@@ -1,0 +1,3 @@
+npm install axios react-native-geolocation-service @react-native-community/geolocation
+npm install react-native-linear-gradient
+npm install react-native-vector-icons
